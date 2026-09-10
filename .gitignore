@@ -1,0 +1,42 @@
+﻿# Large datasets (never push — GitHub 100MB limit, these are 100s of MB)
+esc50.zip
+ravdess.zip
+dev-clean.tar.gz
+esc50_data/
+ravdess_data/
+LibriSpeech/
+data/
+mic_data/
+
+# Old/unused model artifacts (superseded by pinaka_model_multiclass.pkl)
+pinaka_model.pkl
+pinaka_model_embedded.pkl
+pinaka_model.h
+
+# Generated/test audio files
+*.wav
+!noisy_input.wav
+
+# Temp/export folders
+pinaka_code_export/
+pinaka_code.zip
+__pycache__/
+*.pyc
+
+# Streamlit local config/secrets
+.streamlit/
+
+# Misc generated
+feature_importance.png
+pinaka_demo_result.png
+
+# System/unrelated (safety net since repo root = home folder)
+.vscode/
+.idea/
+*.log
+*.jou
+
+.gradle/
+build/
+*.iml
+.dart_tool/
