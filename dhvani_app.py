@@ -13,7 +13,7 @@ from streamlit_mic_recorder import mic_recorder
 
 from dhvani_core import DhvaniPipeline, CLASS_NAMES, SR
 
-st.set_page_config(page_title="DHVANI", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="DHVANI", page_icon=":dart:", layout="wide")
 
 st.markdown("""
 <style>
@@ -43,10 +43,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="hero-tag">SIH 2026 • DRDO • AI DEFENCE TECHNOLOGY</div>', unsafe_allow_html=True)
-st.markdown('<div class="hero-title">DHVA<span>NI</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-tag">SIH 2026 - DRDO - AI DEFENCE TECHNOLOGY</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-title">DHV<span>ANI</span></div>', unsafe_allow_html=True)
 st.markdown('<div class="hero-sub">AI-Powered Adaptive Noise Cancellation for Defence Communications</div>', unsafe_allow_html=True)
-st.markdown('<div class="status-badge">🟢 AI ENGINE READY</div>', unsafe_allow_html=True)
+st.markdown('<div class="status-badge">AI ENGINE READY</div>', unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
 
 CLASS_COLORS = {-1: "#607d8b", 0: "#ff9800", 1: "#ffc107", 2: "#f44336", 3: "#00ff88"}
@@ -64,15 +64,6 @@ bilstm_ready = pipeline.enhancer_loaded
 
 
 def load_mic_audio(raw_bytes, target_sr=16000):
-    """
-    FIX: streamlit_mic_recorder returns WebM/Opus bytes from the browser's
-    MediaRecorder API, NOT WAV, even though st.audio(format='audio/wav') is
-    used for playback. scipy.io.wavfile can only parse real RIFF WAV and
-    throws on the EBML/Matroska header. librosa's ffmpeg-based decoding
-    backend needs a real file on disk to pipe into ffmpeg -- it cannot
-    reliably read an in-memory BytesIO stream -- so we write to a temp
-    .webm file first, then load from that path.
-    """
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
@@ -90,7 +81,7 @@ def plot_comparison(original, cleaned, class_log, frame_len=FRAME_LEN):
     fig, axes = plt.subplots(2, 1, figsize=(11, 4.5))
     fig.patch.set_facecolor('#0a0e14')
     axes[0].plot(original, color='#ff5722', linewidth=0.6)
-    axes[0].set_title("BEFORE — Noisy Input", color='white', fontsize=10)
+    axes[0].set_title("BEFORE - Noisy Input", color='white', fontsize=10)
     axes[0].set_facecolor('#0d1420')
     axes[0].tick_params(colors='#6b7280')
     for spine in axes[0].spines.values(): spine.set_color('#2d3748')
@@ -100,7 +91,7 @@ def plot_comparison(original, cleaned, class_log, frame_len=FRAME_LEN):
         if cls in CLASS_COLORS:
             axes[1].axvspan(i*frame_len, (i+1)*frame_len, color=CLASS_COLORS[cls], alpha=0.12)
     method = "BiLSTM Complex-Mask + Classifier Gating" if bilstm_ready else "Classifier Gain-Gating (BiLSTM not loaded)"
-    axes[1].set_title(f"AFTER — DHVANI Output ({method})", color='white', fontsize=10)
+    axes[1].set_title(f"AFTER - DHVANI Output ({method})", color='white', fontsize=10)
     axes[1].set_facecolor('#0d1420')
     axes[1].tick_params(colors='#6b7280')
     for spine in axes[1].spines.values(): spine.set_color('#2d3748')
@@ -115,7 +106,7 @@ def calculate_snr(clean, noisy):
     return max(10 * np.log10(signal_power / noise_power), 0)
 
 
-def show_results(sr, audio, use_lms, use_bilstm):
+def show_results(sr, audio, use_lms, use_bilstm=False):
     if audio.ndim > 1:
         audio = audio[:, 0]
 
@@ -147,30 +138,31 @@ def show_results(sr, audio, use_lms, use_bilstm):
     m1, m2, m3, m4 = st.columns(4)
     m1.markdown(f'<div class="metric-card"><div class="metric-label">SNR Improvement</div><div class="metric-value metric-blue">+{snr:.1f}dB</div></div>', unsafe_allow_html=True)
     m2.markdown(f'<div class="metric-card"><div class="metric-label">Avg Classifier Confidence</div><div class="metric-value metric-orange">{avg_conf*100:.0f}%</div></div>', unsafe_allow_html=True)
-    method_label = "BiLSTM CRM (Deep Learning)" if bilstm_ready else "Gain-Gating Only"
+    method_label = "BiLSTM CRM (Deep Learning)" if result.get("used_bilstm", False) else "Spectral Subtraction (Stable)"
     m3.markdown(f'<div class="metric-card"><div class="metric-label">Method</div><div class="metric-value" style="font-size:13px; color:#00ff88;">{method_label}</div></div>', unsafe_allow_html=True)
     m4.markdown(f'<div class="metric-card"><div class="metric-label">Impulsive Spikes Caught</div><div class="metric-value" style="color:#f44336;">{spike_count}</div></div>', unsafe_allow_html=True)
 
-    st.caption("Layer 1 (Random Forest) classifies each 100ms frame • Layer 2 (BiLSTM Complex-Ratio-Mask) enhances in the phase-preserving complex STFT domain • confidence-gated gain smoothing applied on top.")
-    st.markdown("<br>**🔊 Cleaned Output**", unsafe_allow_html=True)
+    st.caption("Layer 1 (Random Forest) classifies each 100ms frame - Stage A (Spectral Subtraction) removes bulk noise - optional Stage B (BiLSTM Complex-Ratio-Mask) refines in the phase-preserving complex domain - confidence-gated gain smoothing applied on top.")
+    st.markdown("<br>**Cleaned Output**", unsafe_allow_html=True)
     st.audio(buf, format="audio/wav")
-    st.download_button("⬇️ Download Cleaned Audio", buf, file_name="dhvani_cleaned.wav")
+    st.download_button("Download Cleaned Audio", buf, file_name="dhvani_cleaned.wav")
+
 
 main_col, status_col = st.columns([2.2, 1])
 
 with main_col:
     st.markdown('<div class="section-title">TEST THE <span>AI ENGINE</span></div>', unsafe_allow_html=True)
     use_lms = st.checkbox("Enable optional LMS residual cleanup stage", value=False)
-    use_bilstm = st.checkbox("🧠 Enable Experimental Deep-Learning Mode (BiLSTM Complex-Mask)", value=False)
-    tab1, tab2 = st.tabs(["🎙️ LIVE MIC DEMO", "📤 UPLOAD AUDIO FILE"])
+    use_bilstm = st.checkbox("Enable Experimental Deep-Learning Mode (BiLSTM Complex-Mask)", value=False)
+    tab1, tab2 = st.tabs(["LIVE MIC DEMO", "UPLOAD AUDIO FILE"])
 
     with tab1:
         st.markdown("<br>", unsafe_allow_html=True)
-        audio_data = mic_recorder(start_prompt="🎤 START RECORDING", stop_prompt="⏹️ STOP RECORDING", key="recorder")
+        audio_data = mic_recorder(start_prompt="START RECORDING", stop_prompt="STOP RECORDING", key="recorder")
         if audio_data is not None:
             raw_bytes = audio_data['bytes']
             st.audio(raw_bytes, format="audio/wav")
-            if st.button("▶️ RUN DHVANI AI ENGINE", key="mic_btn"):
+            if st.button("RUN DHVANI AI ENGINE", key="mic_btn"):
                 with st.spinner("Processing through DHVANI engine..."):
                     sr, audio = load_mic_audio(raw_bytes)
                     show_results(sr, audio, use_lms, use_bilstm)
@@ -181,7 +173,7 @@ with main_col:
         if uploaded_file is not None:
             sr, audio = wavfile.read(uploaded_file)
             st.audio(uploaded_file, format="audio/wav")
-            if st.button("▶️ RUN DHVANI AI ENGINE", key="upload_btn"):
+            if st.button("RUN DHVANI AI ENGINE", key="upload_btn"):
                 with st.spinner("Processing through DHVANI engine..."):
                     show_results(sr, audio, use_lms, use_bilstm)
 
@@ -198,6 +190,4 @@ with status_col:
     """, unsafe_allow_html=True)
 
 st.markdown("<br><hr style='border-color:#1f2937;'>", unsafe_allow_html=True)
-st.markdown('<div class="footer-text">SIH 2026 &nbsp;|&nbsp; Problem Statement SIH26052 &nbsp;|&nbsp; DRDO &nbsp;|&nbsp; Team DHVANI</div>', unsafe_allow_html=True)
-
-
+st.markdown('<div class="footer-text">SIH 2026 | Problem Statement SIH26052 | DRDO | Team DHVANI</div>', unsafe_allow_html=True)
