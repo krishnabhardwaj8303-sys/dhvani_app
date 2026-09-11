@@ -1,0 +1,14 @@
+﻿streamlit
+numpy
+scikit-learn
+librosa
+scipy
+matplotlib
+joblib
+streamlit-mic-recorder
+soundfile
+psutil
+imageio-ffmpeg
+torch
+pystoi
+noisereduce
