@@ -1,4 +1,5 @@
 ﻿import os
+import subprocess
 import imageio_ffmpeg
 os.environ["PATH"] += os.pathsep + os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe())
 
@@ -64,17 +65,30 @@ bilstm_ready = pipeline.enhancer_loaded
 
 
 def load_mic_audio(raw_bytes, target_sr=16000):
-    tmp_path = None
+    in_path = None
+    out_path = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
             tmp.write(raw_bytes)
-            tmp_path = tmp.name
-        y, sr = librosa.load(tmp_path, sr=target_sr, mono=True)
-        audio_int16 = (y * 32767).astype(np.int16)
-        return sr, audio_int16
+            in_path = tmp.name
+        out_path = in_path.replace(".webm", ".wav")
+
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        result = subprocess.run(
+            [ffmpeg_exe, "-y", "-i", in_path, "-ar", str(target_sr), "-ac", "1", out_path],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0 or not os.path.exists(out_path):
+            raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+
+        sr, audio = wavfile.read(out_path)
+        if audio.dtype != np.int16:
+            audio = (audio / (np.max(np.abs(audio)) + 1e-8) * 32767).astype(np.int16)
+        return sr, audio
     finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        for p in (in_path, out_path):
+            if p and os.path.exists(p):
+                os.remove(p)
 
 
 def plot_comparison(original, cleaned, class_log, frame_len=FRAME_LEN):
@@ -191,4 +205,3 @@ with status_col:
 
 st.markdown("<br><hr style='border-color:#1f2937;'>", unsafe_allow_html=True)
 st.markdown('<div class="footer-text">SIH 2026 | Problem Statement SIH26052 | DRDO | Team DHVANI</div>', unsafe_allow_html=True)
-
