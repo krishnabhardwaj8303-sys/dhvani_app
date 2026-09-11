@@ -12,3 +12,4 @@ imageio-ffmpeg
 torch
 pystoi
 noisereduce
+streamlit-autorefresh

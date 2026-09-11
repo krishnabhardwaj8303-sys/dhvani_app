@@ -1,5 +1,6 @@
 ﻿import os
 import subprocess
+import threading
 import imageio_ffmpeg
 os.environ["PATH"] += os.pathsep + os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe())
 
@@ -7,10 +8,12 @@ import streamlit as st
 import numpy as np
 import io
 import tempfile
+import time
 import librosa
 from scipy.io import wavfile
 import matplotlib.pyplot as plt
 from streamlit_mic_recorder import mic_recorder
+from streamlit_autorefresh import st_autorefresh
 
 from dhvani_core import DhvaniPipeline, CLASS_NAMES, SR
 
@@ -41,6 +44,8 @@ st.markdown("""
     .footer-text { color: #6b7280; font-size: 12px; text-align: center; padding: 20px 0; }
     .class-legend { display:flex; gap:12px; margin:10px 0; flex-wrap:wrap; }
     .class-chip { padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; }
+    .device-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; }
+    .device-title { font-size: 18px; font-weight: 800; color: #ff5722; margin-bottom: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -62,6 +67,17 @@ def load_pipeline():
 
 pipeline = load_pipeline()
 bilstm_ready = pipeline.enhancer_loaded
+
+# ---- Shared "radio mailbox" for the Field Comms Relay demo ----
+# A process-level dict shared by ALL browser sessions connected to this
+# Streamlit app, simulating a single shared radio channel between two
+# field devices. Not persisted to disk -- resets when the app restarts.
+@st.cache_resource
+def get_mailbox():
+    return {"lock": threading.Lock(), "audio_bytes": None, "sr": None,
+            "timestamp": None, "sender": None, "seq": 0}
+
+mailbox = get_mailbox()
 
 
 def load_mic_audio(raw_bytes, target_sr=16000):
@@ -160,6 +176,7 @@ def show_results(sr, audio, use_lms, use_bilstm=False):
     st.markdown("<br>**Cleaned Output**", unsafe_allow_html=True)
     st.audio(buf, format="audio/wav")
     st.download_button("Download Cleaned Audio", buf, file_name="dhvani_cleaned.wav")
+    return cleaned_int16, result
 
 
 main_col, status_col = st.columns([2.2, 1])
@@ -168,7 +185,7 @@ with main_col:
     st.markdown('<div class="section-title">TEST THE <span>AI ENGINE</span></div>', unsafe_allow_html=True)
     use_lms = st.checkbox("Enable optional LMS residual cleanup stage", value=False)
     use_bilstm = st.checkbox("Enable Experimental Deep-Learning Mode (BiLSTM Complex-Mask)", value=False)
-    tab1, tab2 = st.tabs(["LIVE MIC DEMO", "UPLOAD AUDIO FILE"])
+    tab1, tab2, tab3 = st.tabs(["LIVE MIC DEMO", "UPLOAD AUDIO FILE", "FIELD COMMS RELAY (2-DEVICE)"])
 
     with tab1:
         st.markdown("<br>", unsafe_allow_html=True)
@@ -190,6 +207,71 @@ with main_col:
             if st.button("RUN DHVANI AI ENGINE", key="upload_btn"):
                 with st.spinner("Processing through DHVANI engine..."):
                     show_results(sr, audio, use_lms, use_bilstm)
+
+    with tab3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.caption("Simulates two field radios: Device A transmits the AI-cleaned signal, "
+                   "Device B receives it over the shared channel -- exactly as it would happen "
+                   "between two soldiers' radios. Open this tab in two browser windows to demo live.")
+        colA, colB = st.columns(2)
+
+        with colA:
+            st.markdown('<div class="device-box"><div class="device-title">DEVICE A — Transmit</div>', unsafe_allow_html=True)
+            device_name_a = st.text_input("Callsign", value="Alpha-1", key="device_a_name")
+            tx_source = st.radio("Audio source", ["Upload file", "Record mic"], key="tx_source", horizontal=True)
+
+            tx_audio = None
+            tx_sr = None
+            if tx_source == "Upload file":
+                tx_file = st.file_uploader("Noisy audio to transmit (.wav)", type=["wav"], key="tx_upload")
+                if tx_file is not None:
+                    tx_sr, tx_audio = wavfile.read(tx_file)
+                    st.audio(tx_file, format="audio/wav")
+            else:
+                tx_rec = mic_recorder(start_prompt="RECORD", stop_prompt="STOP", key="tx_mic")
+                if tx_rec is not None:
+                    tx_sr, tx_audio = load_mic_audio(tx_rec['bytes'])
+                    st.audio(tx_rec['bytes'], format="audio/wav")
+
+            if tx_audio is not None and st.button("CLEAN & TRANSMIT", key="tx_btn"):
+                with st.spinner("Cleaning audio and transmitting over channel..."):
+                    if tx_audio.ndim > 1:
+                        tx_audio = tx_audio[:, 0]
+                    result = pipeline.process(tx_sr, tx_audio, use_lms=use_lms, use_bilstm=use_bilstm)
+                    cleaned_int16 = (np.clip(result["cleaned"], -1, 1) * 32767).astype(np.int16)
+                    buf = io.BytesIO()
+                    wavfile.write(buf, tx_sr, cleaned_int16)
+                    buf.seek(0)
+                    with mailbox["lock"]:
+                        mailbox["audio_bytes"] = buf.getvalue()
+                        mailbox["sr"] = tx_sr
+                        mailbox["timestamp"] = time.strftime("%H:%M:%S")
+                        mailbox["sender"] = device_name_a
+                        mailbox["seq"] += 1
+                    st.success(f"Transmitted cleaned audio as '{device_name_a}' -- Device B will receive it.")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        with colB:
+            st.markdown('<div class="device-box"><div class="device-title">DEVICE B — Receive</div>', unsafe_allow_html=True)
+            auto_poll = st.checkbox("Auto-check for incoming transmissions", value=True, key="rx_autopoll")
+            if auto_poll:
+                st_autorefresh(interval=2000, key="rx_refresh")
+
+            with mailbox["lock"]:
+                has_msg = mailbox["audio_bytes"] is not None
+                seq = mailbox["seq"]
+                sender = mailbox["sender"]
+                ts = mailbox["timestamp"]
+                audio_bytes = mailbox["audio_bytes"]
+                sr = mailbox["sr"]
+
+            if has_msg:
+                st.markdown(f"**Incoming transmission #{seq}** from **{sender}** at {ts}")
+                st.audio(audio_bytes, format="audio/wav")
+                st.download_button("Download received audio", audio_bytes, file_name="received_clean.wav", key="rx_download")
+            else:
+                st.info("No transmission received yet. Waiting for Device A...")
+            st.markdown('</div>', unsafe_allow_html=True)
 
 with status_col:
     bilstm_status = '<span class="status-online">LOADED (CRM)</span>' if bilstm_ready else '<span class="status-warn">NOT FOUND</span>'
