@@ -191,3 +191,4 @@ with status_col:
 
 st.markdown("<br><hr style='border-color:#1f2937;'>", unsafe_allow_html=True)
 st.markdown('<div class="footer-text">SIH 2026 | Problem Statement SIH26052 | DRDO | Team DHVANI</div>', unsafe_allow_html=True)
+
