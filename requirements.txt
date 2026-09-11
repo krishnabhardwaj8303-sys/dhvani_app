@@ -13,3 +13,4 @@ torch
 pystoi
 noisereduce
 streamlit-autorefresh
+streamlit-autorefresh
