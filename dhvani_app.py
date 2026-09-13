@@ -253,7 +253,7 @@ with main_col:
 
         with colB:
             st.markdown('<div class="device-box"><div class="device-title">DEVICE B — Receive</div>', unsafe_allow_html=True)
-            auto_poll = st.checkbox("Auto-check for incoming transmissions", value=True, key="rx_autopoll")
+            auto_poll = st.checkbox("Auto-check for incoming transmissions", value=False, key="rx_autopoll")
             if auto_poll:
                 st_autorefresh(interval=2000, key="rx_refresh")
 
